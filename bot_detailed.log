@@ -5176,3 +5176,16 @@
 2025-03-18 16:15:08,880 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
 2025-03-18 16:15:19,569 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
 2025-03-18 16:15:29,961 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
+2025-03-18 16:15:33,527 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
+2025-03-18 16:15:34,948 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-03-18 16:15:34,951 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:15:35,527 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
+2025-03-18 16:15:40,497 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
+2025-03-18 16:15:41,165 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-03-18 16:15:41,167 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:15:41,702 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-03-18 16:15:41,704 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:15:41,706 - __main__ - INFO - Purchase recorded for user 7778240632: premium_vip_ea at Unknown
+2025-03-18 16:15:41,707 - __main__ - INFO - Purchase recorded for user 7778240632: premium_vip_ea at Unknown
+2025-03-18 16:15:41,707 - __main__ - INFO - Follow-up status updated for user 7778240632 to canceled
+2025-03-18 16:15:42,305 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
