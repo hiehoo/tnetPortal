@@ -5197,3 +5197,53 @@
 2025-03-18 16:15:54,388 - __main__ - INFO - User updated in database: 7778240632
 2025-03-18 16:15:54,391 - __main__ - INFO - User updated in database: 7778240632
 2025-03-18 16:15:54,946 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
+2025-03-18 16:16:02,865 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
+2025-03-18 16:16:06,516 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
+2025-03-18 16:16:07,824 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-03-18 16:16:07,827 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:16:08,369 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/deleteMessage "HTTP/1.1 200 OK"
+2025-03-18 16:16:08,372 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:16:08,375 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:16:08,958 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
+2025-03-18 16:16:08,960 - apscheduler.scheduler - INFO - Added job "welcome_testimonial_7778240632" to job store "default"
+2025-03-18 16:16:08,960 - __main__ - INFO - Scheduled welcome testimonial for user 7778240632 with delay 4s
+2025-03-18 16:16:12,961 - apscheduler.scheduler - INFO - Removed job 3b5a46b1a3ea40d6a4e2b1fd6039aba9
+2025-03-18 16:16:12,962 - apscheduler.executors.default - INFO - Running job "welcome_testimonial_7778240632 (trigger: date[2025-03-18 09:16:12 UTC], next run at: 2025-03-18 09:16:12 UTC)" (scheduled at 2025-03-18 09:16:12.960248+00:00)
+2025-03-18 16:16:12,962 - __main__ - INFO - Sending testimonial to user 7778240632 for service general
+2025-03-18 16:16:13,178 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
+2025-03-18 16:16:13,571 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
+2025-03-18 16:16:14,292 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-03-18 16:16:14,297 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:16:14,834 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/deleteMessage "HTTP/1.1 200 OK"
+2025-03-18 16:16:14,836 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:16:14,837 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:16:15,205 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendPhoto "HTTP/1.1 200 OK"
+2025-03-18 16:16:15,353 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
+2025-03-18 16:16:15,356 - apscheduler.scheduler - INFO - Added job "welcome_testimonial_7778240632" to job store "default"
+2025-03-18 16:16:15,356 - __main__ - INFO - Scheduled welcome testimonial for user 7778240632 with delay 4s
+2025-03-18 16:16:16,145 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendPhoto "HTTP/1.1 200 OK"
+2025-03-18 16:16:16,718 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
+2025-03-18 16:16:16,718 - apscheduler.executors.default - INFO - Job "welcome_testimonial_7778240632 (trigger: date[2025-03-18 09:16:12 UTC], next run at: 2025-03-18 09:16:12 UTC)" executed successfully
+2025-03-18 16:16:19,357 - apscheduler.scheduler - INFO - Removed job 7c04a1d8b5db44f48f151708a4511e04
+2025-03-18 16:16:19,359 - apscheduler.executors.default - INFO - Running job "welcome_testimonial_7778240632 (trigger: date[2025-03-18 09:16:19 UTC], next run at: 2025-03-18 09:16:19 UTC)" (scheduled at 2025-03-18 09:16:19.356065+00:00)
+2025-03-18 16:16:19,360 - __main__ - INFO - Sending testimonial to user 7778240632 for service general
+2025-03-18 16:16:19,934 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
+2025-03-18 16:16:20,509 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendPhoto "HTTP/1.1 200 OK"
+2025-03-18 16:16:22,127 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendPhoto "HTTP/1.1 200 OK"
+2025-03-18 16:16:22,703 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendPhoto "HTTP/1.1 200 OK"
+2025-03-18 16:16:22,924 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
+2025-03-18 16:16:23,287 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
+2025-03-18 16:16:23,289 - apscheduler.executors.default - INFO - Job "welcome_testimonial_7778240632 (trigger: date[2025-03-18 09:16:19 UTC], next run at: 2025-03-18 09:16:19 UTC)" executed successfully
+2025-03-18 16:16:24,108 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-03-18 16:16:24,109 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:16:24,646 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/deleteMessage "HTTP/1.1 200 OK"
+2025-03-18 16:16:24,647 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:16:24,650 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:16:25,227 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
+2025-03-18 16:16:33,273 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
+2025-03-18 16:16:41,822 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
+2025-03-18 16:16:43,154 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-03-18 16:16:43,159 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:16:43,781 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/editMessageText "HTTP/1.1 200 OK"
+2025-03-18 16:16:43,783 - apscheduler.scheduler - INFO - Added job "testimonial_7778240632" to job store "default"
+2025-03-18 16:16:43,783 - __main__ - INFO - Scheduled testimonial for user 7778240632 with delay 5s
