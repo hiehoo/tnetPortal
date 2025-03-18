@@ -2,16 +2,21 @@ import os
 import logging
 import sys
 import json
+import random
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import sqlite3
 from sqlite3 import Error
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, JobQueue
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, InputMediaPhoto
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, JobQueue, MessageHandler, filters, ConversationHandler
 from telegram.error import InvalidToken
+from pathlib import Path
 
 # Load environment variables
 load_dotenv()
+
+# Admin user IDs loaded from environment variables
+ADMIN_IDS = [int(id.strip()) for id in os.getenv('ADMIN_IDS', '982793851').split(',')]
 
 # Enable logging
 logging.basicConfig(
@@ -26,6 +31,12 @@ logger = logging.getLogger(__name__)
 
 # Database setup
 DATABASE_FILE = "tnetc_bot.db"
+
+# Add constant for proof images path
+PROOF_IMAGES_DIR = "/Users/hieuho/tnetPortal/proof_images"
+
+# Add near the top with other constants
+TESTIMONIAL_IMAGES_DIR = "/Users/hieuho/tnetPortal/testimonial_images"
 
 def create_connection():
     """Create a database connection to the SQLite database."""
@@ -106,6 +117,19 @@ def create_tables():
                     status TEXT DEFAULT 'scheduled',
                     response TEXT,
                     FOREIGN KEY (user_id) REFERENCES users (user_id)
+                )
+            ''')
+            
+            # Testimonials table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS testimonials (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT,
+                    text TEXT,
+                    image_path TEXT,
+                    service TEXT,
+                    timestamp TEXT,
+                    active INTEGER DEFAULT 1
                 )
             ''')
             
@@ -322,6 +346,99 @@ def has_purchased(user_id):
     
     return False
 
+def add_testimonial(name, text, image_path, service):
+    """Add a new testimonial to the database."""
+    conn = create_connection()
+    
+    if conn is not None:
+        try:
+            cursor = conn.cursor()
+            current_time = datetime.now().isoformat()
+            
+            cursor.execute(
+                "INSERT INTO testimonials (name, text, image_path, service, timestamp) VALUES (?, ?, ?, ?, ?)",
+                (name, text, image_path, service, current_time)
+            )
+            
+            conn.commit()
+            logger.info(f"New testimonial added for {name} on service {service}")
+            return cursor.lastrowid
+        except Error as e:
+            logger.error(f"Database testimonial save error: {e}")
+        finally:
+            conn.close()
+    else:
+        logger.error("Cannot create database connection")
+    
+    return None
+
+def get_random_testimonials(service=None, limit=3):
+    """Get random testimonials from image directory with generated content."""
+    try:
+        # Get all testimonial images
+        image_files = [f for f in os.listdir(TESTIMONIAL_IMAGES_DIR) 
+                      if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        
+        # Create testimonial entries
+        testimonials = []
+        for img_file in image_files:
+            testimonials.append({
+                'name': "Verified Member",
+                'text': "This service changed my trading completely!",
+                'image_path': os.path.join(TESTIMONIAL_IMAGES_DIR, img_file),
+                'service': 'general'
+            })
+        
+        # Randomize and limit results
+        random.shuffle(testimonials)
+        return testimonials[:limit]
+        
+    except Exception as e:
+        logger.error(f"Error loading testimonial images: {str(e)}")
+        return []
+
+def get_all_testimonials():
+    """Get all testimonials from the database."""
+    conn = create_connection()
+    
+    if conn is not None:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM testimonials ORDER BY timestamp DESC")
+            testimonials = cursor.fetchall()
+            return testimonials
+        except Error as e:
+            logger.error(f"Database testimonial query error: {e}")
+        finally:
+            conn.close()
+    else:
+        logger.error("Cannot create database connection")
+    
+    return []
+
+def toggle_testimonial_status(testimonial_id, active=True):
+    """Activate or deactivate a testimonial."""
+    conn = create_connection()
+    
+    if conn is not None:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE testimonials SET active = ? WHERE id = ?",
+                (1 if active else 0, testimonial_id)
+            )
+            conn.commit()
+            logger.info(f"Testimonial {testimonial_id} set to active={active}")
+            return True
+        except Error as e:
+            logger.error(f"Database testimonial update error: {e}")
+        finally:
+            conn.close()
+    else:
+        logger.error("Cannot create database connection")
+    
+    return False
+
 # Initialize database tables
 create_tables()
 
@@ -429,49 +546,114 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await regular_welcome(update, context)
 
 async def regular_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send the standard welcome message with the three main plan options."""
+    """Send a detailed welcome message with all service options."""
+    message = None
+    chat_id = None
+    
+    if update.message:
+        message = update.message
+        chat_id = update.message.chat_id
+        user = update.message.from_user
+    elif update.callback_query:
+        message = update.callback_query.message
+        chat_id = update.callback_query.message.chat_id
+        user = update.callback_query.from_user
+    else:
+        logger.error("Cannot identify message or user in regular_welcome")
+        return
+    
+    # Log user interaction
+    log_user_interaction(update, "welcome", {
+        "source": "regular",
+        "timestamp": datetime.now().isoformat()
+    })
+    
+    # Save user if new
+    user_first_name = user.first_name if hasattr(user, 'first_name') else ''
+    user_last_name = user.last_name if hasattr(user, 'last_name') else ''
+    username = user.username if hasattr(user, 'username') else ''
+    
+    save_user(chat_id, username, user_first_name, user_last_name)
+    
+    # Welcome message with FOMO elements
+    welcome_text = (
+        f"*🔥 Welcome to TNETC Trading's EXCLUSIVE Community! 🔥*\n\n"
+        f"You've just discovered what the top 1% of traders DON'T want you to know. Our members are silently making consistent profits while others struggle.\n\n"
+        f"*⚠️ LIMITED-TIME OPPORTUNITIES:*\n\n"
+        f"*1. 🚀 X10 CHALLENGE - ALMOST SOLD OUT!*\n"
+        f"• 10X your account in just 66 days (proven strategy)\n"
+        f"• *ONLY 17 SLOTS LEFT* out of 100\n"
+        f"• *$350 VALUE → $0 (FREE)* - Offer ends this week!\n\n"
+        f"*2. 💰 LIFETIME COPYTRADE - NEVER OFFERED AGAIN*\n"
+        f"• Automated profits without lifting a finger\n"
+        f"• Members already making $500-$2500/week\n"
+        f"• *$500 VALUE → $0 (FREE LIFETIME)* - Last chance!\n\n"
+        f"*3. 💎 PREMIUM VIP SIGNAL + EA TRADING BOT*\n"
+        f"• Our most elite package (94% win rate last month)\n"
+        f"• Members reporting 40%+ monthly returns\n"
+        f"• *ONLY 5 SPOTS* available at current pricing\n\n"
+        f"*⏰ Which opportunity will you grab before it's gone?*"
+    )
+    
+    # Create keyboard
     keyboard = [
-        [InlineKeyboardButton("🔥 Special, x10 challenge, 100 slots, $350 -> $0", callback_data='special_challenge')],
-        [InlineKeyboardButton("🔥 Copytrade Plan - $500 -> $0/lifetime", callback_data='copytrade_lifetime')],
-        [InlineKeyboardButton("💎 Premium VIP Signal with EA Trading Bot", callback_data='premium_vip_ea')],
+        [InlineKeyboardButton("🔥 X10 Challenge (ONLY 17 SLOTS LEFT)", callback_data="special_challenge")],
+        [InlineKeyboardButton("💰 Copytrade (FINAL FREE OFFER)", callback_data="copytrade_lifetime")],
+        [InlineKeyboardButton("💎 Premium VIP Signal + EA Bot (5 SPOTS)", callback_data="premium_vip_ea")]
     ]
-
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Get chat ID safely
-    chat_id = None
-    if update.effective_chat:
-        chat_id = update.effective_chat.id
-    elif update.callback_query and update.callback_query.message:
-        chat_id = update.callback_query.message.chat_id
-    
-    if not chat_id:
-        logger.error("Could not determine chat ID for welcome message")
-        return
-        
-    message = "Welcome to Tnetc, fam!\n\nFounded by pro traders with 10+ years experience delivering top-tier signals & tools.\n\n*OUR PREMIUM SERVICES:*\n\n🔥 *SPECIAL x10 CHALLENGE*\n- Limited 100 slots only\n- Copy trading challenge to 10x your account\n- Previous result: x10 in 66 days\n- $350 value - currently FREE!\n\n🔥 *COPYTRADE PLAN*\n- Copy trade us on Puprime (guaranteed profits)\n- 1-on-1 setup + weekly reports\n- No trading knowledge needed\n- $500 value - currently FREE!\n\n💎 *PREMIUM VIP SIGNAL + EA TRADING BOT*\n- 1-on-1 signal guidance\n- EA trading bot (80% win rate)\n- VIP copy trading + 24/7 support\n- Exclusive top-tier trader group\n\nLast month: FX +40.36% ✅ | GOLD +19.41% ✅\nWin Rate: 94% 🚀\n\nPlease select your subscription plan:"
-    
     try:
-        # Try to send message
-        if update.message:
-            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+        # Send welcome message
+        if not message:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=welcome_text,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
         else:
-            await context.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup, parse_mode='Markdown')
+            try:
+                await message.reply_text(
+                    welcome_text,
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                logger.error(f"Error replying to message: {str(e)}")
+                # Fallback to sending new message
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=welcome_text,
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+        
+        # 50% chance to send a testimonial after welcome
+        if random.random() < 0.5:  # 50% chance
+            # Schedule testimonial to be sent after 3-5 seconds
+            delay = random.randint(3, 5)
+            try:
+                context.job_queue.run_once(
+                    lambda ctx: send_testimonial_to_user(ctx, chat_id, 'general'),
+                    delay,
+                    name=f"welcome_testimonial_{chat_id}"
+                )
+                logger.info(f"Scheduled welcome testimonial for user {chat_id} with delay {delay}s")
+            except Exception as e:
+                logger.error(f"Error scheduling welcome testimonial: {str(e)}")
+                
     except Exception as e:
         logger.error(f"Error sending welcome message: {str(e)}")
-        # Try fallback
-        try:
-            await context.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup, parse_mode='Markdown')
-        except Exception as inner_e:
-            logger.error(f"Fallback message also failed: {str(inner_e)}")
 
 async def ea_focused_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """EA-focused welcome for users coming from EA ads."""
     keyboard = [
-        [InlineKeyboardButton("🔥 x10 challenge - $350 → $0", callback_data='special_challenge')],
-        [InlineKeyboardButton("🔥 Copytrade - $500 → $0/lifetime", callback_data='copytrade_lifetime')],
-        [InlineKeyboardButton("💎 Premium VIP Signal + EA Trading Bot", callback_data='premium_vip_ea')],
-        [InlineKeyboardButton("📊 View Performance Results", callback_data='ea_results')],
+        [InlineKeyboardButton("🚀 X10 CHALLENGE - 17 SLOTS LEFT!", callback_data='special_challenge')],
+        [InlineKeyboardButton("💰 COPYTRADE - FINAL FREE OFFER", callback_data='copytrade_lifetime')],
+        [InlineKeyboardButton("💎 PREMIUM VIP SIGNAL + EA BOT - 5 SPOTS", callback_data='premium_vip_ea')],
+        [InlineKeyboardButton("📊 VIEW LIVE RESULTS - 94% WIN RATE", callback_data='ea_results')],
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -487,7 +669,27 @@ async def ea_focused_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.error("Could not determine chat ID for EA focused welcome message")
         return
         
-    message = "Welcome to Tnetc, fam!\n\nFounded by pro traders with 10+ years experience delivering top-tier signals & tools.\n\n*OUR PREMIUM SERVICES:*\n\n🔥 *SPECIAL x10 CHALLENGE*\n- Limited 100 slots only\n- Copy trading challenge to 10x your account\n- Previous result: x10 in 66 days\n- $350 value - currently FREE!\n\n🔥 *COPYTRADE PLAN*\n- Copy trade us on Puprime (guaranteed profits)\n- 1-on-1 setup + weekly reports\n- No trading knowledge needed\n- $500 value - currently FREE!\n\n💎 *PREMIUM VIP SIGNAL + EA TRADING BOT*\n- 1-on-1 signal guidance\n- EA trading bot (80% win rate)\n- VIP copy trading + 24/7 support\n- Exclusive top-tier trader group\n\nLast month: FX +40.36% ✅ | GOLD +19.41% ✅\nWin Rate: 94% 🚀\n\nPlease select your subscription plan:"
+    message = (
+        "*🔥 EXCLUSIVE ACCESS: TNETC PREMIUM TRADING SYSTEMS 🔥*\n\n"
+        "You're among the select few to access our elite trading solutions that most traders will NEVER discover.\n\n"
+        "*⚠️ TIME-SENSITIVE OPPORTUNITIES:*\n\n"
+        "*🚀 X10 CHALLENGE - 83% SOLD OUT!*\n"
+        "- Only 17 of 100 slots remaining\n"
+        "- Our last challenge: 10X in JUST 66 days\n"
+        "- Members reporting life-changing gains\n"
+        "- *$350 VALUE - FREE ACCESS CLOSING THIS WEEK!*\n\n"
+        "*💰 COPYTRADE SYSTEM - FINAL OFFER EVER*\n"
+        "- Set & forget account growth (we trade for you)\n"
+        "- Current members earning $500-$2500/week\n"
+        "- Zero experience needed - 100% automated\n"
+        "- *$500 VALUE - LIFETIME FREE ACCESS ENDING SOON*\n\n"
+        "*💎 PREMIUM VIP + EA TRADING BOT - ALMOST FULL*\n"
+        "- Our most powerful system (80% win rate)\n"
+        "- Last month: FX +40.36% | GOLD +19.41%\n"
+        "- Members consistently outperforming the market\n"
+        "- *ONLY 5 SPOTS LEFT at current pricing!*\n\n"
+        "*⏰ WHICH OPPORTUNITY WILL YOU CLAIM BEFORE IT'S GONE?*"
+    )
     
     try:
         # Try to send message
@@ -495,6 +697,21 @@ async def ea_focused_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
         else:
             await context.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup, parse_mode='Markdown')
+            
+        # 40% chance to send a testimonial after welcome
+        if random.random() < 0.4:  # 40% chance
+            # Schedule testimonial to be sent after 3-5 seconds
+            delay = random.randint(3, 5)
+            try:
+                context.job_queue.run_once(
+                    lambda ctx: send_testimonial_to_user(ctx, chat_id, 'ea'),
+                    delay,
+                    name=f"welcome_testimonial_{chat_id}"
+                )
+                logger.info(f"Scheduled EA focused welcome testimonial for user {chat_id}")
+            except Exception as e:
+                logger.error(f"Error scheduling EA welcome testimonial: {str(e)}")
+                
     except Exception as e:
         logger.error(f"Error sending EA focused welcome message: {str(e)}")
         # Try fallback
@@ -506,10 +723,10 @@ async def ea_focused_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def signal_focused_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Signal-focused welcome for users coming from signal ads."""
     keyboard = [
-        [InlineKeyboardButton("🔥 x10 challenge - $350 → $0", callback_data='special_challenge')],
-        [InlineKeyboardButton("🔥 Copytrade - $500 → $0/lifetime", callback_data='copytrade_lifetime')],
-        [InlineKeyboardButton("💎 Premium VIP Signal + EA Trading Bot", callback_data='premium_vip_ea')],
-        [InlineKeyboardButton("📊 View Signal Performance", callback_data='signal_results')],
+        [InlineKeyboardButton("🚀 X10 CHALLENGE - 17 SLOTS LEFT!", callback_data='special_challenge')],
+        [InlineKeyboardButton("💰 COPYTRADE - FINAL FREE OFFER", callback_data='copytrade_lifetime')],
+        [InlineKeyboardButton("💎 PREMIUM VIP SIGNAL + EA BOT - 5 SPOTS", callback_data='premium_vip_ea')],
+        [InlineKeyboardButton("📊 VIEW 94% WIN RATE PROOF", callback_data='signal_results')],
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -522,10 +739,30 @@ async def signal_focused_welcome(update: Update, context: ContextTypes.DEFAULT_T
         chat_id = update.callback_query.message.chat_id
     
     if not chat_id:
-        logger.error("Could not determine chat ID for signal focused welcome message")
+        logger.error("Could not determine chat ID for Signal focused welcome message")
         return
         
-    message = "Welcome to TNETC Premium Signals! 📈\n\nYou've discovered our high-performance trading services with:\n✅ 94% combined win rate\n✅ +40.36% on FX last month\n✅ +19.41% on GOLD last month\n\n*OUR PREMIUM SERVICES:*\n\n🔥 *SPECIAL x10 CHALLENGE*\n• Limited 100 slots only - FREE!\n\n🔥 *COPYTRADE PLAN*\n• We trade for you - no knowledge needed\n• $500 value - currently FREE!\n\n💎 *PREMIUM VIP SIGNAL + EA TRADING BOT*\n• Our most comprehensive solution\n• Both signals and automated trading\n\nSelect a plan to get started:"
+    message = (
+        "*🚨 URGENT: TNETC SIGNAL SERVICE - LIMITED ACCESS 🚨*\n\n"
+        "You're viewing our ELITE signal service that most retail traders will never discover (94% win rate).\n\n"
+        "*⚠️ ACT FAST - LIMITED OPPORTUNITIES:*\n\n"
+        "*🚀 X10 CHALLENGE - NEARLY SOLD OUT!*\n"
+        "- Only 17 slots remaining (83% already claimed)\n"
+        "- Previous members: 10X gains in just 66 days\n"
+        "- Proven strategy with verifiable results\n"
+        "- *$350 VALUE - FREE ACCESS ENDS THIS WEEK!*\n\n"
+        "*💰 COPYTRADE SYSTEM - LAST CHANCE EVER*\n"
+        "- Hands-free profits (we trade for you)\n"
+        "- Current members earning $500-$2500 weekly\n"
+        "- 100% automated - no experience required\n"
+        "- *$500 VALUE - LIFETIME FREE ACCESS CLOSING SOON*\n\n"
+        "*💎 PREMIUM VIP SIGNAL + EA BOT - 5 SPOTS LEFT*\n"
+        "- Our most powerful combo (highest returns)\n"
+        "- Last month: +40.36% on FX, +19.41% on GOLD\n"
+        "- Members consistently outperforming markets\n"
+        "- *PRICE INCREASING NEXT WEEK - LAST CHANCE!*\n\n"
+        "*⏰ DON'T MISS OUT - THESE OFFERS EXPIRE SOON!*"
+    )
     
     try:
         # Try to send message
@@ -533,8 +770,23 @@ async def signal_focused_welcome(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
         else:
             await context.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup, parse_mode='Markdown')
+            
+        # 40% chance to send a testimonial after welcome
+        if random.random() < 0.4:  # 40% chance
+            # Schedule testimonial to be sent after 3-5 seconds
+            delay = random.randint(3, 5)
+            try:
+                context.job_queue.run_once(
+                    lambda ctx: send_testimonial_to_user(ctx, chat_id, 'signal'),
+                    delay,
+                    name=f"welcome_testimonial_{chat_id}"
+                )
+                logger.info(f"Scheduled Signal focused welcome testimonial for user {chat_id}")
+            except Exception as e:
+                logger.error(f"Error scheduling Signal welcome testimonial: {str(e)}")
+                
     except Exception as e:
-        logger.error(f"Error sending signal focused welcome message: {str(e)}")
+        logger.error(f"Error sending Signal focused welcome message: {str(e)}")
         # Try fallback
         try:
             await context.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup, parse_mode='Markdown')
@@ -544,10 +796,10 @@ async def signal_focused_welcome(update: Update, context: ContextTypes.DEFAULT_T
 async def vip_focused_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """VIP-focused welcome for users coming from VIP ads."""
     keyboard = [
-        [InlineKeyboardButton("🔥 x10 challenge - $350 → $0", callback_data='special_challenge')],
-        [InlineKeyboardButton("🔥 Copytrade - $500 → $0/lifetime", callback_data='copytrade_lifetime')],
-        [InlineKeyboardButton("💎 Premium VIP Signal + EA Trading Bot", callback_data='premium_vip_ea')],
-        [InlineKeyboardButton("📊 View PremiumVIP Benefits", callback_data='vip_benefits')],
+        [InlineKeyboardButton("🚀 X10 CHALLENGE - 17 SLOTS LEFT!", callback_data='special_challenge')],
+        [InlineKeyboardButton("💰 COPYTRADE - FINAL FREE OFFER", callback_data='copytrade_lifetime')],
+        [InlineKeyboardButton("💎 PREMIUM VIP SIGNAL + EA BOT - 5 SPOTS", callback_data='premium_vip_ea')],
+        [InlineKeyboardButton("🔒 EXCLUSIVE VIP BENEFITS", callback_data='vip_benefits')],
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -563,7 +815,27 @@ async def vip_focused_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error("Could not determine chat ID for VIP focused welcome message")
         return
         
-    message = "Welcome to TNETC VIP Trading! 💎\n\nYou've discovered our exclusive premium trading services with:\n✅ Expert 1-on-1 guidance\n✅ VIP copy trading with higher returns\n✅ 24/7 VIP support\n\n*OUR PREMIUM SERVICES:*\n\n🔥 *SPECIAL x10 CHALLENGE*\n• Limited 100 slots only - FREE!\n\n🔥 *COPYTRADE PLAN*\n• We trade for you - no knowledge needed\n• $500 value - currently FREE!\n\n💎 *PREMIUM VIP SIGNAL + EA TRADING BOT*\n• Our most comprehensive solution\n• Both signals and automated trading\n\nSelect a plan to get started:"
+    message = (
+        "*💎 EXCLUSIVE: TNETC VIP INNER CIRCLE - BY INVITATION ONLY 💎*\n\n"
+        "You've been granted access to our ELITE trading community that only the top 1% of traders ever discover.\n\n"
+        "*⚠️ URGENT - FINAL ROUND OF OPPORTUNITIES:*\n\n"
+        "*🚀 X10 CHALLENGE - 83% FILLED!*\n"
+        "- Just 17 slots remain from original 100\n"
+        "- Previous challenge: 10X return in 66 days\n"
+        "- Members reporting life-changing profits\n"
+        "- *$350 VALUE - FREE ACCESS ENDING THIS WEEK!*\n\n"
+        "*💰 COPYTRADE SYSTEM - FINAL OPPORTUNITY*\n"
+        "- Passive income without doing the work\n"
+        "- Current members: $500-$2500 weekly profits\n"
+        "- Zero learning curve - 100% automated\n"
+        "- *$500 VALUE - NEVER FREE AGAIN AFTER THIS WEEK*\n\n"
+        "*💎 PREMIUM VIP + EA TRADING BOT - 5 SPOTS REMAINING*\n"
+        "- Our most elite package (highest ROI)\n"
+        "- Proven: +40.36% FX & +19.41% GOLD last month\n"
+        "- Exclusive strategies not shared publicly\n"
+        "- *PRICE INCREASING 30% NEXT WEEK - LOCK IN NOW!*\n\n"
+        "*⏰ WHICH ELITE OPPORTUNITY WILL YOU SECURE TODAY?*"
+    )
     
     try:
         # Try to send message
@@ -571,6 +843,21 @@ async def vip_focused_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
         else:
             await context.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup, parse_mode='Markdown')
+            
+        # 40% chance to send a testimonial after welcome
+        if random.random() < 0.4:  # 40% chance
+            # Schedule testimonial to be sent after 3-5 seconds
+            delay = random.randint(3, 5)
+            try:
+                context.job_queue.run_once(
+                    lambda ctx: send_testimonial_to_user(ctx, chat_id, 'vip'),
+                    delay,
+                    name=f"welcome_testimonial_{chat_id}"
+                )
+                logger.info(f"Scheduled VIP focused welcome testimonial for user {chat_id}")
+            except Exception as e:
+                logger.error(f"Error scheduling VIP welcome testimonial: {str(e)}")
+                
     except Exception as e:
         logger.error(f"Error sending VIP focused welcome message: {str(e)}")
         # Try fallback
@@ -585,100 +872,126 @@ async def ea_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await ea_focused_welcome(update, context)
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle button clicks for all plans."""
+    """Handle button clicks from inline keyboards."""
+    query = update.callback_query
+    
     try:
-        query = update.callback_query
         await query.answer()
-
+        data = query.data
+        
+        # Handle the different callback data
         log_user_interaction(update, "button_click", {
-            "selection": query.data,
+            "selection": data,
             "button_click_time": datetime.now().isoformat()
         })
-
+        
         # Check if message is available (not too old)
         if query.message is None:
-            logger.warning(f"Message is no longer available for callback {query.data}")
+            logger.warning(f"Message is no longer available for callback {data}")
             # For navigation handlers, we need to handle the case where the message is None
-            if query.data == 'show_all_services':
+            if data == 'show_all_services':
                 await regular_welcome(update, context)
                 return
-            elif query.data == 'back_to_ea_welcome':
+            elif data == 'back_to_ea_welcome':
                 await ea_focused_welcome(update, context)
                 return
-            elif query.data == 'back_to_signal_welcome':
+            elif data == 'back_to_signal_welcome':
                 await signal_focused_welcome(update, context)
                 return
-            elif query.data == 'back_to_vip_welcome':
+            elif data == 'back_to_vip_welcome':
                 await vip_focused_welcome(update, context)
                 return
-            elif query.data == 'back_to_ea_funnel':
+            elif data == 'back_to_ea_funnel':
                 await ea_focused_welcome(update, context)
                 return
 
         # Handle premium VIP with EA option
-        if query.data == 'premium_vip_ea':
+        if data == 'premium_vip_ea':
             await send_premium_vip_ea_details(update, context)
             # Schedule follow-up
             schedule_user_followup(update, context, 'vip_ea')
             
         # Handle specific plan selections
-        elif query.data == 'special_challenge':
+        elif data == 'special_challenge':
             keyboard = [
-                [InlineKeyboardButton("🚀 Claim my spot", url="https://t.me/tnetccommunity/186")],
-                [InlineKeyboardButton("📱 Contact Support", url="https://t.me/trump_tnetc_admin")],
-                [InlineKeyboardButton("🔙 Back to Plans", callback_data='show_all_services')]
+                [InlineKeyboardButton("🚀 CLAIM MY SPOT NOW (17 LEFT)", url="https://t.me/tnetccommunity/186")],
+                [InlineKeyboardButton("📱 Contact Support", url='https://t.me/m/1Q0AzxOLNDY1')],
+                [InlineKeyboardButton("⏱️ VIEW PREVIOUS CHALLENGE RESULTS", callback_data="ea_results")],
+                [InlineKeyboardButton("« BACK TO ALL SERVICES", callback_data="show_all_services")]
             ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
             
-            message = (
-                "🔥 *X10 CHALLENGE + 100 SLOTS* 🔥\n\n"
-                "• Turn $1K into $10K with our guidance\n"
-                "• Normally: $350\n"
-                "• Today only: $0\n\n"
-                "⚠️ Only 37 slots remaining!\n\n"
-                "This offer includes:\n"
-                "• Premium signals\n"
-                "• Expert guidance\n"
-                "• Risk management strategy\n"
-                "• Full documentation\n\n"
-                "Ready to claim your spot?"
-            )
+            reply_markup = InlineKeyboardMarkup(keyboard)
             
             try:
                 if query.message:
-                    await query.message.reply_text(
-                        message,
-                        parse_mode='Markdown',
-                        reply_markup=reply_markup
+                    await query.message.edit_text(
+                        "*🔥 X10 CHALLENGE - FINAL 17 SPOTS AVAILABLE! 🔥*\n\n"
+                        "*⚠️ WARNING: This offer is closing THIS WEEK ⚠️*\n\n"
+                        "Our exclusive X10 Challenge has helped members achieve incredible results:\n\n"
+                        "✅ Previous challenge: *10X account growth in just 66 days*\n"
+                        "✅ Members reporting $500-$3,000+ profits weekly\n"
+                        "✅ Step-by-step guidance from professional traders\n"
+                        "✅ Proven strategy with 94% win rate\n\n"
+                        "*WHAT YOU GET:*\n"
+                        "• Access to exclusive challenge group\n"
+                        "• Premium signals (not available elsewhere)\n"
+                        "• 1-on-1 strategy coaching\n"
+                        "• Daily trade opportunities\n\n"
+                        "*ORIGINAL PRICE: $350*\n"
+                        "*CURRENT PRICE: $0 (FREE)*\n\n"
+                        "*⏰ ONLY 17 SPOTS REMAIN - OFFER ENDS THIS WEEK!*\n"
+                        "Our last batch of members filled within 24 hours. Don't miss this opportunity!",
+                        reply_markup=reply_markup,
+                        parse_mode='Markdown'
                     )
                 else:
-                    # Fallback if message is None
+                    # Fallback if message is too old
                     chat_id = update.effective_chat.id
-                    await query.bot.send_message(
+                    await context.bot.send_message(
                         chat_id=chat_id,
-                        text=message,
-                        parse_mode='Markdown',
-                        reply_markup=reply_markup
+                        text="*🔥 X10 CHALLENGE - FINAL 17 SPOTS AVAILABLE! 🔥*\n\n"
+                        "*⚠️ WARNING: This offer is closing THIS WEEK ⚠️*\n\n"
+                        "Our exclusive X10 Challenge has helped members achieve incredible results:\n\n"
+                        "✅ Previous challenge: *10X account growth in just 66 days*\n"
+                        "✅ Members reporting $500-$3,000+ profits weekly\n"
+                        "✅ Step-by-step guidance from professional traders\n"
+                        "✅ Proven strategy with 94% win rate\n\n"
+                        "*WHAT YOU GET:*\n"
+                        "• Access to exclusive challenge group\n"
+                        "• Premium signals (not available elsewhere)\n"
+                        "• 1-on-1 strategy coaching\n"
+                        "• Daily trade opportunities\n\n"
+                        "*ORIGINAL PRICE: $350*\n"
+                        "*CURRENT PRICE: $0 (FREE)*\n\n"
+                        "*⏰ ONLY 17 SPOTS REMAIN - OFFER ENDS THIS WEEK!*\n"
+                        "Our last batch of members filled within 24 hours. Don't miss this opportunity!",
+                        reply_markup=reply_markup,
+                        parse_mode='Markdown'
                     )
+                
+                # Schedule follow-up
+                schedule_user_followup(update, context, 'challenge')
+                
             except Exception as e:
                 logger.error(f"Error sending special challenge info: {str(e)}")
-                # Try one more fallback
+                # Try fallback message
                 try:
                     chat_id = update.effective_chat.id
                     await context.bot.send_message(
                         chat_id=chat_id,
-                        text=message,
-                        parse_mode='Markdown',
-                        reply_markup=reply_markup
+                        text="*🔥 X10 CHALLENGE - FINAL 17 SPOTS AVAILABLE! 🔥*\n\n"
+                        "*Sorry, we couldn't update the message. Please click the button again or contact support if this persists.*",
+                        reply_markup=reply_markup,
+                        parse_mode='Markdown'
                     )
                 except Exception as inner_e:
                     logger.error(f"Fallback message also failed: {str(inner_e)}")
                     
-        elif query.data == 'copytrade_lifetime':
+        elif data == 'copytrade_lifetime':
             # Special handling for copytrade lifetime plan
             keyboard = [
-                [InlineKeyboardButton("📱 Contact Support", url='https://t.me/trump_tnetc_admin')],
-                [InlineKeyboardButton("✅ I've Made Payment", callback_data='payment_made_copytrade')],
+                [InlineKeyboardButton("📱 Contact Support", url='https://t.me/m/KAYFGGyMYzk1')],
+                [InlineKeyboardButton("📊 View Profit Proof", callback_data='copytrade_profit_proof')],
                 [InlineKeyboardButton("🔙 Back to Plans", callback_data='show_all_services')]
             ]
             
@@ -719,7 +1032,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             # Schedule follow-up
             schedule_user_followup(update, context, 'copytrade')
 
-        elif query.data == 'standard_trial':
+        elif data == 'standard_trial':
             await send_plan_details(
                 update, 
                 "⭐️ Standard Plan - 1 Week FREE Trial",
@@ -730,7 +1043,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             # Schedule follow-up
             schedule_user_followup(update, context, 'standard')
             
-        elif query.data == 'standard_monthly':
+        elif data == 'standard_monthly':
             await send_plan_details(
                 update, 
                 "⭐️ Standard Plan - $66/month",
@@ -741,7 +1054,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             # Schedule follow-up
             schedule_user_followup(update, context, 'standard')
             
-        elif query.data == 'standard_lifetime':
+        elif data == 'standard_lifetime':
             await send_plan_details(
                 update, 
                 "⭐️ Standard Plan - $300/lifetime",
@@ -752,7 +1065,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             # Schedule follow-up
             schedule_user_followup(update, context, 'standard')
             
-        elif query.data == 'vip_monthly':
+        elif data == 'vip_monthly':
             await send_plan_details(
                 update, 
                 "⭐️ VIP Plan - $300/month",
@@ -763,7 +1076,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             # Schedule follow-up
             schedule_user_followup(update, context, 'vip')
             
-        elif query.data == 'vip_lifetime':
+        elif data == 'vip_lifetime':
             await send_plan_details(
                 update, 
                 "⭐️ VIP Plan - $2000/lifetime",
@@ -775,49 +1088,49 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             schedule_user_followup(update, context, 'vip')
             
         # EA-specific handlers
-        elif query.data == 'ea_results':
+        elif data == 'ea_results':
             await send_ea_results(update, context)
             
-        elif query.data == 'ea_stats':
+        elif data == 'ea_stats':
             await send_ea_performance(update, context)
             
-        elif query.data == 'ea_how_works':
+        elif data == 'ea_how_works':
             await send_ea_explanation(update, context)
             
-        elif query.data == 'ea_pricing':
+        elif data == 'ea_pricing':
             await send_ea_pricing(update, context)
             
         # Signal-specific handlers
-        elif query.data == 'signal_results':
+        elif data == 'signal_results':
             await send_signal_results(update, context)
             
         # VIP-specific handlers
-        elif query.data == 'vip_benefits':
+        elif data == 'vip_benefits':
             await send_vip_benefits(update, context)
             
         # Navigation handlers
-        elif query.data == 'show_all_services':
+        elif data == 'show_all_services':
             try:
                 if query.message:
                     await query.message.delete()
             except Exception as e:
                 logger.error(f"Error deleting message: {str(e)}")
             await regular_welcome(update, context)
-        elif query.data == 'back_to_ea_welcome':
+        elif data == 'back_to_ea_welcome':
             try:
                 if query.message:
                     await query.message.delete()
             except Exception as e:
                 logger.error(f"Error deleting message: {str(e)}")
             await ea_focused_welcome(update, context)
-        elif query.data == 'back_to_signal_welcome':
+        elif data == 'back_to_signal_welcome':
             try:
                 if query.message:
                     await query.message.delete()
             except Exception as e:
                 logger.error(f"Error deleting message: {str(e)}")
             await signal_focused_welcome(update, context)
-        elif query.data == 'back_to_vip_welcome':
+        elif data == 'back_to_vip_welcome':
             try:
                 if query.message:
                     await query.message.delete()
@@ -827,126 +1140,149 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await ea_focused_welcome(update, context)
             
         # EA purchase handlers
-        elif query.data.startswith('purchase_'):
+        elif data.startswith('purchase_'):
             await handle_purchase_selection(update, context)
             
         # Payment confirmation handlers
-        elif query.data.startswith('payment_made_'):
+        elif data.startswith('payment_made_'):
             await handle_payment_confirmation(update, context)
             
         # Setup guide handlers
-        elif query.data.startswith('setup_guide_'):
+        elif data.startswith('setup_guide_'):
             await send_setup_guide(update, context)
             
         # Follow-up response handlers
-        elif query.data.startswith('resume_') or query.data.startswith('followup_'):
+        elif data.startswith('resume_') or data.startswith('followup_'):
             await handle_followup_response(update, context)
             
+        # After handling standard button options, randomly send a testimonial (20% chance)
+        if random.random() < 0.2:  # 20% chance
+            service = None
+            
+            # Try to determine relevant service from the button clicked
+            if "ea" in data:
+                service = "ea"
+            elif "vip" in data:
+                service = "vip"
+            elif "signal" in data:
+                service = "signal"
+            elif "copytrade" in data:
+                service = "copytrade"
+            elif "challenge" in data:
+                service = "challenge"
+            
+            # Schedule testimonial to be sent 3-5 seconds after the response
+            delay = random.randint(3, 5)
+            context.job_queue.run_once(
+                lambda ctx: send_testimonial_to_user(ctx, query.message.chat_id, service),
+                delay,
+                name=f"testimonial_{query.message.chat_id}"
+            )
+            
+            logger.info(f"Scheduled testimonial for user {query.message.chat_id} with delay {delay}s")
+        
     except Exception as e:
-        error_details = {
-            "error_type": type(e).__name__,
-            "error_message": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
-        log_user_interaction(update, "error", error_details)
         logger.error(f"Error handling button click: {str(e)}")
         try:
-            if update.effective_message:
-                await update.effective_message.reply_text(
-                    "Sorry, something went wrong. Please try again later."
-                )
+            await query.edit_message_text(
+                "Sorry, there was an error processing your request. Please try again or type /start to restart."
+            )
         except Exception as inner_e:
-            logger.error(f"Error sending error message: {str(inner_e)}")
+            logger.error(f"Failed to send error message: {str(inner_e)}")
 
 async def send_plan_details(update, title, description, plan_code, price):
-    """Send details about the selected plan with purchase options."""
+    """Send details about a plan."""
     # Check if message is available
-    if update.callback_query.message is None:
-        logger.warning(f"Message is no longer available for plan details: {plan_code}")
-        
-    message = (
-        f"*{title}*\n\n"
-        f"{description}\n\n"
-    )
-    
-    # Add plan-specific details based on the plan_code
-    if "Standard" in plan_code:
-        message += (
-            "*What's Included:*\n"
-            "✅ 1-3 daily signals with full analysis\n"
-            "✅ Multi-timeframe strategy\n"
-            "✅ Expert live trading sessions\n"
-            "✅ Copy trade on Puprime\n"
-            "✅ Basic training documentation\n\n"
-        )
-    elif "VIP" in plan_code:
-        message += (
-            "*What's Included:*\n"
-            "✅ ALL Standard Plan benefits\n"
-            "✅ 1-on-1 signal execution guidance\n"
-            "✅ VIP copy trading (higher returns)\n"
-            "✅ Advanced training documentation\n"
-            "✅ 24/7 VIP support\n"
-            "✅ Exclusive VIP trader group\n\n"
-        )
-    elif "Copytrade" in plan_code:
-        message += (
-            "*What's Included:*\n"
-            "✅ Copy trade us on Puprime\n"
-            "✅ 1-on-1 account setup support\n"
-            "✅ Weekly performance reports\n"
-            "✅ Perfect for beginners - no trading knowledge needed\n\n"
-        )
-    elif "Challenge" in plan_code:
-        message += (
-            "*What's Included:*\n"
-            "✅ Exclusive x10 Challenge group access\n"
-            "✅ Special high-return signals\n"
-            "✅ Limited to 100 participants only\n"
-            "✅ $350 value - currently FREE!\n\n"
-        )
-    
-    message += (
-        f"*Price: {price}*\n\n"
-        "To get started with this plan, contact our support team."
-    )
-    
-    keyboard = [
-        [InlineKeyboardButton("📱 Contact Support", url='https://t.me/trump_tnetc_admin')],
-        [InlineKeyboardButton("Explore my self", url='https://t.me/tnect_trade')],
-        [InlineKeyboardButton("🔙 Back to Plans", callback_data='show_all_services')]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    try:
-        if update.callback_query.message:
-            await update.callback_query.message.reply_text(
-                message, 
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
-            )
-        else:
-            # Fallback if message is None
+    if update.callback_query and update.callback_query.message is None:
+        logger.warning(f"Message no longer available for plan_details: {plan_code}")
+        try:
+            # Fallback to sending a new message
             chat_id = update.effective_chat.id
+            text = create_plan_text(title, description, plan_code, price)
+            reply_markup = create_plan_keyboard(plan_code)
+            
             await update.callback_query.bot.send_message(
-                chat_id=chat_id,
-                text=message,
+                chat_id=chat_id, 
+                text=text,
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
+            return True
+        except Exception as e:
+            logger.error(f"Error sending plan details fallback: {str(e)}")
+            return False
+    
+    text = create_plan_text(title, description, plan_code, price)
+    reply_markup = create_plan_keyboard(plan_code)
+    
+    try:
+        if update.callback_query and update.callback_query.message:
+            message = update.callback_query.message
+            await message.edit_text(text=text, reply_markup=reply_markup, parse_mode='Markdown')
+            
+            # 30% chance to send a testimonial after plan details
+            if random.random() < 0.3:  # 30% chance
+                # Send testimonial related to this plan
+                service = None
+                if "ea" in plan_code:
+                    service = "ea"
+                elif "vip" in plan_code:
+                    service = "vip"
+                elif "signal" in plan_code:
+                    service = "signal"
+                elif "copytrade" in plan_code:
+                    service = "copytrade"
+                elif "challenge" in plan_code:
+                    service = "challenge"
+                
+                # Schedule testimonial to be sent 2-4 seconds after the plan details
+                delay = random.randint(2, 4)
+                context = update.callback_query._context
+                if context and hasattr(context, 'job_queue') and context.job_queue:
+                    context.job_queue.run_once(
+                        lambda ctx: send_testimonial_to_user(ctx, message.chat_id, service),
+                        delay,
+                        name=f"testimonial_{message.chat_id}"
+                    )
+                    logger.info(f"Scheduled testimonial for user {message.chat_id} with delay {delay}s")
+            
+            logger.info(f"Plan details sent for {plan_code}")
+            return True
+        else:
+            logger.error("No message available to update")
+            return False
     except Exception as e:
         logger.error(f"Error sending plan details: {str(e)}")
-        # Fallback: try to send a new message to the chat if reply_text fails
         try:
+            # Fallback to sending a new message
             chat_id = update.effective_chat.id
             await update.callback_query.bot.send_message(
                 chat_id=chat_id,
-                text=message,
+                text=text,
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
+            return True
         except Exception as inner_e:
-            logger.error(f"Fallback message also failed: {str(inner_e)}")
+            logger.error(f"Error sending plan details fallback: {str(inner_e)}")
+            return False
+
+def create_plan_text(title, description, plan_code, price):
+    """Create formatted text for a plan."""
+    return (
+        f"*{title}*\n\n"
+        f"{description}\n\n"
+        f"*Price: {price}*\n\n"
+        f"To purchase this plan, click the button below."
+    )
+
+def create_plan_keyboard(plan_code):
+    """Create keyboard with purchase button for a plan."""
+    keyboard = [
+        [InlineKeyboardButton("Purchase Now", callback_data=f"purchase_{plan_code}")],
+        [InlineKeyboardButton("« Back to all services", callback_data="show_all_services")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 async def send_ea_results(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send EA performance results."""
@@ -1031,7 +1367,9 @@ async def schedule_followup(context: ContextTypes.DEFAULT_TYPE) -> None:
         'vip': "I noticed you were checking out our VIP Trading Plan. Our VIP members enjoy exclusive benefits like 1-on-1 signal guidance and higher returns.",
         'signal': "I noticed you were looking at our Signal Service. Our signals have a 94% win rate and can significantly improve your trading results.",
         'standard': "I noticed you were exploring our Standard Plan. It's a great way to get started with our premium trading signals and support.",
-        'copytrade': "I noticed you were checking out our Copytrade Plan. It's perfect if you want to earn without having to trade yourself - we handle everything for you."
+        'copytrade': "I noticed you were checking out our Copytrade Plan. It's perfect if you want to earn without having to trade yourself - we handle everything for you.",
+        'challenge': "I noticed you were exploring our x10 Challenge. This exclusive opportunity has helped traders multiply their accounts by 10x in just 66 days.",
+        'vip_ea': "I noticed you were exploring our Premium VIP Signal + EA Trading Bot package. This comprehensive solution gives you the best of both worlds."
     }
     
     base_message = service_messages.get(service, "I noticed you were exploring our services recently but didn't complete your purchase.")
@@ -1040,7 +1378,7 @@ async def schedule_followup(context: ContextTypes.DEFAULT_TYPE) -> None:
     message = (
         f"👋 *Follow-up from TNETC Trading*\n\n"
         f"{base_message}\n\n"
-        f"Would you like to continue where you left off or do you have questions I can help with?"
+        f"Check out what our customers are saying:"
     )
     
     keyboard = [
@@ -1052,12 +1390,33 @@ async def schedule_followup(context: ContextTypes.DEFAULT_TYPE) -> None:
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
+        # Send initial message
         await context.bot.send_message(
             chat_id=chat_id,
             text=message,
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
+        
+        # Send testimonial images from directory
+        try:
+            testimonials = get_random_testimonials(service, 2)
+            
+            for testimonial in testimonials:
+                img_path = testimonial['image_path']
+                if os.path.exists(img_path):
+                    caption = f"*{testimonial['name']}:* {testimonial['text']}"
+                    with open(img_path, 'rb') as photo:
+                        await context.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=photo,
+                            caption=caption,
+                            parse_mode='Markdown'
+                        )
+        
+        except Exception as e:
+            logger.error(f"Error sending follow-up testimonials: {str(e)}")
+        
         logger.info(f"Follow-up message sent to user {user_id} for {service}")
         
         # Update follow-up status in database
@@ -1089,16 +1448,15 @@ def schedule_user_followup(update: Update, context: ContextTypes.DEFAULT_TYPE, s
     
     # Schedule follow-up for 24 hours later
     context.job_queue.run_once(
-        schedule_followup,
+        lambda ctx: send_testimonial_to_user(ctx, chat_id, service),
         timedelta(hours=24),
-        data={'user_id': user_id, 'service': service},
         name=f"followup_{user_id}_{service}"
     )
     
     logger.info(f"Scheduled follow-up for user {user_id} for {service} in 24 hours")
 
 async def handle_purchase_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle purchase button clicks."""
+    """Handle when a user selects a plan to purchase."""
     query = update.callback_query
     await query.answer()
 
@@ -1121,7 +1479,7 @@ async def handle_purchase_selection(update: Update, context: ContextTypes.DEFAUL
     
     # Payment instructions
     keyboard = [
-        [InlineKeyboardButton("📱 Contact Support", url='https://t.me/trump_tnetc_admin')],
+        [InlineKeyboardButton("📱 Contact Support", url='https://t.me/m/DvGbHx0NZTFl')],
         [InlineKeyboardButton("✅ I've Made Payment", callback_data=f'payment_made_{plan}')],
         [InlineKeyboardButton("🔙 Back to Plans", callback_data='ea_pricing')]
     ]
@@ -1155,6 +1513,31 @@ async def handle_purchase_selection(update: Update, context: ContextTypes.DEFAUL
         
         # Schedule a follow-up if user doesn't complete purchase
         schedule_user_followup(update, context, service)
+        
+        # Always send a related testimonial after purchase selection
+        if message:
+            chat_id = message.chat.id
+            # Determine which service was selected
+            service = None
+            if "ea" in plan_code:
+                service = "ea"
+            elif "vip" in plan_code:
+                service = "vip"
+            elif "signal" in plan_code:
+                service = "signal"
+            elif "copytrade" in plan_code:
+                service = "copytrade"
+            elif "challenge" in plan_code:
+                service = "challenge"
+            
+            # Schedule testimonial to be sent 3 seconds after the purchase options
+            context.job_queue.run_once(
+                lambda ctx: send_testimonial_to_user(ctx, chat_id, service),
+                3,  # 3 seconds delay
+                name=f"testimonial_{chat_id}"
+            )
+            
+            logger.info(f"Scheduled purchase testimonial for user {chat_id}")
         
     except Exception as e:
         logger.error(f"Error sending purchase selection info: {str(e)}")
@@ -1617,7 +2000,7 @@ async def send_ea_pricing(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             logger.error(f"Fallback message also failed: {str(inner_e)}")
 
 async def send_signal_results(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send Signal performance results."""
+    """Send Signal performance results with proof images."""
     # Check if message is available
     if update.callback_query.message is None:
         logger.warning("Message is no longer available for Signal results")
@@ -1651,20 +2034,36 @@ async def send_signal_results(update: Update, context: ContextTypes.DEFAULT_TYPE
     reply_markup = InlineKeyboardMarkup(keyboard)
     try:
         if update.callback_query.message:
-            await update.callback_query.message.reply_text(
+            msg = await update.callback_query.message.reply_text(
                 message, 
                 reply_markup=reply_markup, 
                 parse_mode='Markdown'
             )
         else:
-            # Fallback if message is None
-            chat_id = update.effective_chat.id
-            await context.bot.send_message(
+            msg = await context.bot.send_message(
                 chat_id=chat_id,
                 text=message,
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
+
+        # Send 3 random proof images
+        try:
+            proof_images = [f for f in os.listdir(PROOF_IMAGES_DIR) if f.lower().endswith('.jpg')]
+            selected_images = random.sample(proof_images, min(3, len(proof_images)))
+            
+            for img_file in selected_images:
+                img_path = os.path.join(PROOF_IMAGES_DIR, img_file)
+                with open(img_path, 'rb') as photo:
+                    await context.bot.send_photo(
+                        chat_id=msg.chat_id,
+                        photo=photo,
+                        caption="📈 Real Member Profit Proof",
+                        parse_mode='Markdown'
+                    )
+        except Exception as img_error:
+            logger.error(f"Error sending proof images: {str(img_error)}")
+
     except Exception as e:
         logger.error(f"Error sending Signal results: {str(e)}")
         # Fallback: try to send a new message to the chat if reply_text fails
@@ -2032,6 +2431,75 @@ async def send_premium_vip_ea_details(update, context):
         except Exception as inner_e:
             logger.error(f"Fallback message also failed: {str(inner_e)}")
 
+async def send_testimonial_to_user(context, chat_id, service):
+    """Send testimonial images to a user from the testimonial_images directory."""
+    logger.info(f"Sending testimonial to user {chat_id} for service {service}")
+    
+    try:
+        # Get all testimonial images
+        image_files = [f for f in os.listdir(TESTIMONIAL_IMAGES_DIR) 
+                      if f.lower().endswith(('.png', '.jpg', '.jpeg')) and not f.startswith('.')]
+        
+        if not image_files:
+            logger.warning("No testimonial images found in directory")
+            return
+            
+        # Select random images (2-3)
+        num_images = random.randint(2, 3)
+        selected_images = random.sample(image_files, min(num_images, len(image_files)))
+        
+        # Create engaging captions
+        testimonial_captions = [
+            "🔥 *Another member just posted:* \"I'm up $7,890 this week using the signals!\"",
+            "💰 *VIP Member results:* \"Just hit my first $10K profit day thanks to this group!\"",
+            "📈 *Verified member:* \"I've already made back 5x what I paid for this service!\"",
+            "🚀 *Member testimonial:* \"These signals are insanely accurate - 8/10 winners today!\"",
+            "💯 *Just in:* \"Been using the EA for 2 weeks and already up 37% - incredible!\"",
+            "⚡️ *Member feedback:* \"This is the only trading group that consistently delivers!\"",
+            "🏆 *Top performer:* \"Turned $5K into $22K in just one month following these signals\"",
+            "🔐 *VIP member:* \"Finally found a service that actually delivers as promised!\""
+        ]
+        
+        # Prepare the message text
+        intro_message = "*🔥 Latest Results from Our Community 🔥*\n\nMembers are crushing it with our exclusive signals & EA bot...\n\n"
+        
+        # Send intro message
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=intro_message,
+            parse_mode='Markdown'
+        )
+        
+        # Send images individually instead of as a group
+        for img_file in selected_images:
+            img_path = os.path.join(TESTIMONIAL_IMAGES_DIR, img_file)
+            caption = random.choice(testimonial_captions)
+            
+            # Open the file in binary mode
+            with open(img_path, 'rb') as photo:
+                await context.bot.send_photo(
+                    chat_id=chat_id,
+                    photo=photo,
+                    caption=caption,
+                    parse_mode='Markdown'
+                )
+        
+        # Send call to action
+        keyboard = [
+            [InlineKeyboardButton("🔥 Join VIP Now (Limited Spots)", callback_data="premium_vip_ea")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="*⏰ Don't Miss Out! Our special promotion ends soon!*\n\nSecure your spot now before prices increase!",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error sending testimonial: {str(e)}")
+
 def main() -> None:
     """Start the bot."""
     try:
@@ -2049,6 +2517,7 @@ def main() -> None:
         application.add_handler(CommandHandler("stats", get_stats))
         application.add_handler(CommandHandler("user_info", get_user_info))
         application.add_handler(CommandHandler("export_users", export_users))
+        # Remove or implement the other commands if needed
         
         # Add error handler
         application.add_error_handler(error_handler)
