@@ -5189,3 +5189,11 @@
 2025-03-18 16:15:41,707 - __main__ - INFO - Purchase recorded for user 7778240632: premium_vip_ea at Unknown
 2025-03-18 16:15:41,707 - __main__ - INFO - Follow-up status updated for user 7778240632 to canceled
 2025-03-18 16:15:42,305 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
+2025-03-18 16:15:50,855 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
+2025-03-18 16:15:52,512 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/getUpdates "HTTP/1.1 200 OK"
+2025-03-18 16:15:53,820 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/answerCallbackQuery "HTTP/1.1 200 OK"
+2025-03-18 16:15:53,822 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:15:54,386 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/deleteMessage "HTTP/1.1 200 OK"
+2025-03-18 16:15:54,388 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:15:54,391 - __main__ - INFO - User updated in database: 7778240632
+2025-03-18 16:15:54,946 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8023981639:AAE5GDL2zEwdZWYo4GtHFfEdsuoBR4I73N8/sendMessage "HTTP/1.1 200 OK"
